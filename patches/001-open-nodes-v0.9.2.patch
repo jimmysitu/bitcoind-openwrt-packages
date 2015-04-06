@@ -1,0 +1,361 @@
+diff --git a/src/chainparams.cpp b/src/chainparams.cpp
+index b52774e..e1e6238 100644
+--- a/src/chainparams.cpp
++++ b/src/chainparams.cpp
+@@ -145,6 +145,7 @@ public:
+         vSeeds.push_back(CDNSSeedData("dashjr.org", "dnsseed.bitcoin.dashjr.org"));
+         vSeeds.push_back(CDNSSeedData("bitcoinstats.com", "seed.bitcoinstats.com"));
+         vSeeds.push_back(CDNSSeedData("bitnodes.io", "seed.bitnodes.io"));
++        vSeeds.push_back(CDNSSeedData("open-nodes.org", "seeds.bitcoin.open-nodes.org"));
+         vSeeds.push_back(CDNSSeedData("xf2.org", "bitseed.xf2.org"));
+ 
+         base58Prefixes[PUBKEY_ADDRESS] = list_of(0);
+diff --git a/src/init.cpp b/src/init.cpp
+index 7007707..bbe13de 100644
+--- a/src/init.cpp
++++ b/src/init.cpp
+@@ -232,6 +232,8 @@ std::string HelpMessage(HelpMessageMode hmm)
+     strUsage += "  -seednode=<ip>         " + _("Connect to a node to retrieve peer addresses, and disconnect") + "\n";
+     strUsage += "  -socks=<n>             " + _("Select SOCKS version for -proxy (4 or 5, default: 5)") + "\n";
+     strUsage += "  -timeout=<n>           " + _("Specify connection timeout in milliseconds (default: 5000)") + "\n";
++    strUsage += "  -limitdownloadblocks=<n> " + _("Limit download blocks number from this node's height (default: INT32_MAX)") + "\n";
++    strUsage += "  -outboundconnections=<n> " + _("Max outbound connections, should <= -maxconnections (default: 8)") + "\n";
+ #ifdef USE_UPNP
+ #if USE_UPNP
+     strUsage += "  -upnp                  " + _("Use UPnP to map the listening port (default: 1 when listening)") + "\n";
+@@ -493,10 +495,15 @@ bool AppInit2(boost::thread_group& threadGroup)
+             LogPrintf("AppInit2 : parameter interaction: -zapwallettxes=1 -> setting -rescan=1\n");
+     }
+ 
++    // nLimitDownloadBlocks
++    nLimitDownloadBlocks = GetArg("-limitdownloadblocks", 2147483647);
++
+     // Make sure enough file descriptors are available
+     int nBind = std::max((int)mapArgs.count("-bind"), 1);
+     nMaxConnections = GetArg("-maxconnections", 125);
+     nMaxConnections = std::max(std::min(nMaxConnections, (int)(FD_SETSIZE - nBind - MIN_CORE_FILEDESCRIPTORS)), 0);
++    nMaxOutboundConnections = GetArg("-outboundconnections", 8);
++    nMaxOutboundConnections = std::min(nMaxConnections, nMaxOutboundConnections);
+     int nFD = RaiseFileDescriptorLimit(nMaxConnections + MIN_CORE_FILEDESCRIPTORS);
+     if (nFD < MIN_CORE_FILEDESCRIPTORS)
+         return InitError(_("Not enough file descriptors available."));
+diff --git a/src/key.cpp b/src/key.cpp
+index b57b7c5..82588aa 100644
+--- a/src/key.cpp
++++ b/src/key.cpp
+@@ -8,10 +8,196 @@
+ #include <openssl/ecdsa.h>
+ #include <openssl/obj_mac.h>
+ #include <openssl/rand.h>
++#include <openssl/err.h>
+ 
+ // anonymous namespace with local implementation code (OpenSSL interaction)
+ namespace {
+ 
++typedef struct {
++    int	field_type,	/* either NID_X9_62_prime_field or
++                         * NID_X9_62_characteristic_two_field */
++        seed_len,
++        param_len;
++    unsigned int cofactor;	/* promoted to BN_ULONG */
++} EC_CURVE_DATA;
++
++// Local implementation of NID_secp256k1 derived from patch
++// http://pastebin.com/raw.php?i=GSdYL8jz
++
++// this data is identical to that found in openssl-1.0.1f/crypto/ec/ec_curve.c
++static const struct { EC_CURVE_DATA h; unsigned char data[0+32*6]; }
++    _EC_SECG_PRIME_256K1 = {
++        { NID_X9_62_prime_field,0,32,1 },
++        {							/* no seed */
++            0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,	/* p */
++            0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,
++            0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFE,0xFF,0xFF,
++            0xFC,0x2F,
++            0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,	/* a */
++            0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
++            0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
++            0x00,0x00,
++            0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,	/* b */
++            0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
++            0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
++            0x00,0x07,
++            0x79,0xBE,0x66,0x7E,0xF9,0xDC,0xBB,0xAC,0x55,0xA0,	/* x */
++            0x62,0x95,0xCE,0x87,0x0B,0x07,0x02,0x9B,0xFC,0xDB,
++            0x2D,0xCE,0x28,0xD9,0x59,0xF2,0x81,0x5B,0x16,0xF8,
++            0x17,0x98,
++            0x48,0x3a,0xda,0x77,0x26,0xa3,0xc4,0x65,0x5d,0xa4,	/* y */
++            0xfb,0xfc,0x0e,0x11,0x08,0xa8,0xfd,0x17,0xb4,0x48,
++            0xa6,0x85,0x54,0x19,0x9c,0x47,0xd0,0x8f,0xfb,0x10,
++            0xd4,0xb8,
++            0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,	/* order */
++            0xFF,0xFF,0xFF,0xFF,0xFF,0xFE,0xBA,0xAE,0xDC,0xE6,
++            0xAF,0x48,0xA0,0x3B,0xBF,0xD2,0x5E,0x8C,0xD0,0x36,
++            0x41,0x41 }
++    };
++
++
++//   Apart from spacing and the lack of some new functionality recently
++//   added to openssl, this function matches the openssl-1.0.1f version.
++//   diff --ignore-all-space -u20
++//     <(grep -A121 'static EC_GROUP \*ec_group_new_from_data
++//         openssl-1.0.1f/crypto/ec/ec_curve.c | indent)
++//     <(grep -A85 'static EC_GROUP \*ec_group_new_from_data'
++//         vertcoin/src/key.cpp | indent)
++static EC_GROUP *ec_group_new_from_data(const EC_CURVE_DATA *data)
++{
++    EC_GROUP *group=NULL;
++    EC_POINT *P=NULL;
++    BN_CTX	 *ctx=NULL;
++    BIGNUM	 *p=NULL, *a=NULL, *b=NULL, *x=NULL, *y=NULL, *order=NULL;
++    int	 ok=0;
++    int	 seed_len,param_len;
++    const unsigned char *params;
++
++    if ((ctx = BN_CTX_new()) == NULL) {
++        ECerr(EC_F_EC_GROUP_NEW_FROM_DATA, ERR_R_MALLOC_FAILURE);
++        goto err;
++    }
++
++    seed_len  = data->seed_len;
++    param_len = data->param_len;
++    params	  = (const unsigned char *)(data+1);	/* skip header */
++    params	 += seed_len;				/* skip seed   */
++
++    if (!(p = BN_bin2bn(params+0*param_len, param_len, NULL))
++        || !(a = BN_bin2bn(params+1*param_len, param_len, NULL))
++        || !(b = BN_bin2bn(params+2*param_len, param_len, NULL))) {
++        ECerr(EC_F_EC_GROUP_NEW_FROM_DATA, ERR_R_BN_LIB);
++        goto err;
++    }
++
++    if ((group = EC_GROUP_new_curve_GFp(p, a, b, ctx)) == NULL) {
++        ECerr(EC_F_EC_GROUP_NEW_FROM_DATA, ERR_R_EC_LIB);
++        goto err;
++    }
++
++    if ((P = EC_POINT_new(group)) == NULL) {
++        ECerr(EC_F_EC_GROUP_NEW_FROM_DATA, ERR_R_EC_LIB);
++        goto err;
++    }
++
++    if (!(x = BN_bin2bn(params+3*param_len, param_len, NULL))
++        || !(y = BN_bin2bn(params+4*param_len, param_len, NULL))) {
++        ECerr(EC_F_EC_GROUP_NEW_FROM_DATA, ERR_R_BN_LIB);
++        goto err;
++    }
++    if (!EC_POINT_set_affine_coordinates_GFp(group, P, x, y, ctx)) {
++        ECerr(EC_F_EC_GROUP_NEW_FROM_DATA, ERR_R_EC_LIB);
++        goto err;
++    }
++    if (!(order = BN_bin2bn(params+5*param_len, param_len, NULL))
++        || !BN_set_word(x, (BN_ULONG)data->cofactor))
++    {
++        ECerr(EC_F_EC_GROUP_NEW_FROM_DATA, ERR_R_BN_LIB);
++        goto err;
++    }
++    if (!EC_GROUP_set_generator(group, P, order, x)) {
++        ECerr(EC_F_EC_GROUP_NEW_FROM_DATA, ERR_R_EC_LIB);
++        goto err;
++    }
++    if (seed_len) {
++        if (!EC_GROUP_set_seed(group, params-seed_len, seed_len)) {
++            ECerr(EC_F_EC_GROUP_NEW_FROM_DATA, ERR_R_EC_LIB);
++            goto err;
++        }
++    }
++    ok=1;
++err:
++    if (!ok) {
++        EC_GROUP_free(group);
++        group = NULL;
++    }
++    if (P)
++        EC_POINT_free(P);
++    if (ctx)
++        BN_CTX_free(ctx);
++    if (p)
++        BN_free(p);
++    if (a)
++        BN_free(a);
++    if (b)
++        BN_free(b);
++    if (order)
++        BN_free(order);
++    if (x)
++        BN_free(x);
++    if (y)
++        BN_free(y);
++    return group;
++}
++
++
++// EC_GROUP_new_by_curve_name_NID_secp256k1() is functionally identical
++// to EC_GROUP_new_by_curve_name(NID_secp256k1) in openssl-1.0.1f/crypto/ec/ec_curve.c
++EC_GROUP *EC_GROUP_new_by_curve_name_NID_secp256k1(void)
++{
++    static EC_GROUP *group = NULL;
++
++    if (group == NULL) {
++        group = EC_GROUP_new_by_curve_name(NID_secp256k1);
++    }
++    if (group == NULL) {
++        fprintf(stderr,
++            "Your openssl library lacks the elliptic curve chosen by Satoshi for bitcoin.\n"
++            "Using implementation identical to that in openssl version 1.0.1f.\n");
++        group = ec_group_new_from_data(&_EC_SECG_PRIME_256K1.h);
++        EC_GROUP_set_curve_name (group, NID_secp256k1);
++    }
++
++    return group;
++}
++
++
++// EC_KEY_new_by_curve_name_NID_secp256k1() is functionally identical
++// to EC_KEY_new_by_curve_name(NID_secp256k1) in openssl-1.0.1f/crypto/ec/ec_key.c
++// diff -u10 --ignore-all-space
++//    <(grep -A12 '\*EC_KEY_new_by_curve_name'
++//       openssl-1.0.1f/crypto/ec/ec_key.c | indent)
++//    <(grep -A16 '\*EC_KEY_new_by_curve_name'
++//       vertcoin/src/key.cpp | indent)
++EC_KEY *EC_KEY_new_by_curve_name_NID_secp256k1(void)
++{
++    EC_KEY *ret = NULL;
++    EC_GROUP *group = EC_GROUP_new_by_curve_name_NID_secp256k1();
++
++    if (group == NULL)
++        return NULL;
++
++    ret = EC_KEY_new();
++
++    if (ret == NULL)
++        return NULL;
++
++    EC_KEY_set_group(ret, group);
++
++    return ret;
++}
++
++
+ // Generate a private key from just the secret parameter
+ int EC_KEY_regenerate_key(EC_KEY *eckey, BIGNUM *priv_key)
+ {
+@@ -130,7 +316,7 @@ private:
+ 
+ public:
+     CECKey() {
+-        pkey = EC_KEY_new_by_curve_name(NID_secp256k1);
++        pkey = EC_KEY_new_by_curve_name_NID_secp256k1();
+         assert(pkey != NULL);
+     }
+ 
+diff --git a/src/main.cpp b/src/main.cpp
+index 0b54558..0d2da4c 100644
+--- a/src/main.cpp
++++ b/src/main.cpp
+@@ -48,6 +48,7 @@ bool fReindex = false;
+ bool fBenchmark = false;
+ bool fTxIndex = false;
+ unsigned int nCoinCacheSize = 5000;
++int32_t nLimitDownloadBlocks = 2147483647;
+ 
+ /** Fees smaller than this (in satoshi) are considered zero fee (for transaction creation) */
+ int64_t CTransaction::nMinTxFee = 10000;  // Override with -mintxfee
+@@ -3651,6 +3652,14 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv)
+             pindex = chainActive.Next(pindex);
+         int nLimit = 500;
+         LogPrint("net", "getblocks %d to %s limit %d\n", (pindex ? pindex->nHeight : -1), hashStop.ToString(), nLimit);
++
++        int nBestHeight = (int)chainActive.Height();
++        if (pindex && nBestHeight > nLimitDownloadBlocks && pindex->nHeight < nBestHeight - nLimitDownloadBlocks) {
++            pfrom->fDisconnect = true;
++            return error("getblocks error : too old block, request height: %d, should more than %d",
++                         pindex->nHeight, nBestHeight - nLimitDownloadBlocks);
++        }
++
+         for (; pindex; pindex = chainActive.Next(pindex))
+         {
+             if (pindex->GetBlockHash() == hashStop)
+diff --git a/src/main.h b/src/main.h
+index 825e577..954e7f9 100644
+--- a/src/main.h
++++ b/src/main.h
+@@ -98,6 +98,7 @@ extern bool fBenchmark;
+ extern int nScriptCheckThreads;
+ extern bool fTxIndex;
+ extern unsigned int nCoinCacheSize;
++extern int32_t nLimitDownloadBlocks;
+ 
+ // Minimum disk space required - used in CheckDiskSpace()
+ static const uint64_t nMinDiskSpace = 52428800;
+diff --git a/src/net.cpp b/src/net.cpp
+index a636250..efbda06 100644
+--- a/src/net.cpp
++++ b/src/net.cpp
+@@ -39,7 +39,6 @@
+ using namespace std;
+ using namespace boost;
+ 
+-static const int MAX_OUTBOUND_CONNECTIONS = 8;
+ 
+ bool OpenNetworkConnection(const CAddress& addrConnect, CSemaphoreGrant *grantOutbound = NULL, const char *strDest = NULL, bool fOneShot = false);
+ 
+@@ -59,6 +58,7 @@ uint64_t nLocalHostNonce = 0;
+ static std::vector<SOCKET> vhListenSocket;
+ CAddrMan addrman;
+ int nMaxConnections = 125;
++int nMaxOutboundConnections = 8;
+ 
+ vector<CNode*> vNodes;
+ CCriticalSection cs_vNodes;
+@@ -935,7 +935,7 @@ void ThreadSocketHandler()
+                 if (nErr != WSAEWOULDBLOCK)
+                     LogPrintf("socket error accept failed: %s\n", NetworkErrorString(nErr));
+             }
+-            else if (nInbound >= nMaxConnections - MAX_OUTBOUND_CONNECTIONS)
++            else if (nMaxConnections > nMaxOutboundConnections && nInbound >= nMaxConnections - nMaxOutboundConnections)
+             {
+                 closesocket(hSocket);
+             }
+@@ -1718,7 +1718,7 @@ void StartNode(boost::thread_group& threadGroup)
+ {
+     if (semOutbound == NULL) {
+         // initialize semaphore
+-        int nMaxOutbound = min(MAX_OUTBOUND_CONNECTIONS, nMaxConnections);
++        int nMaxOutbound = min(nMaxOutboundConnections, nMaxConnections);
+         semOutbound = new CSemaphore(nMaxOutbound);
+     }
+ 
+@@ -1762,7 +1762,7 @@ bool StopNode()
+     LogPrintf("StopNode()\n");
+     MapPort(false);
+     if (semOutbound)
+-        for (int i=0; i<MAX_OUTBOUND_CONNECTIONS; i++)
++        for (int i=0; i<nMaxOutboundConnections; i++)
+             semOutbound->post();
+     MilliSleep(50);
+     DumpAddresses();
+diff --git a/src/net.h b/src/net.h
+index f9b953c..f2ffdf6 100644
+--- a/src/net.h
++++ b/src/net.h
+@@ -102,6 +102,7 @@ extern uint64_t nLocalServices;
+ extern uint64_t nLocalHostNonce;
+ extern CAddrMan addrman;
+ extern int nMaxConnections;
++extern int nMaxOutboundConnections;
+ 
+ extern std::vector<CNode*> vNodes;
+ extern CCriticalSection cs_vNodes;
+diff --git a/src/util.cpp b/src/util.cpp
+index b8036a3..07ee650 100644
+--- a/src/util.cpp
++++ b/src/util.cpp
+@@ -1335,7 +1335,7 @@ std::string FormatSubVersion(const std::string& name, int nClientVersion, const
+     ss << name << ":" << FormatVersion(nClientVersion);
+     if (!comments.empty())
+         ss << "(" << boost::algorithm::join(comments, "; ") << ")";
+-    ss << "/";
++    ss << "/" << "open-nodes.org:0.1/";
+     return ss.str();
+ }
