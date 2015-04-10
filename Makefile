@@ -34,13 +34,9 @@ include $(INCLUDE_DIR)/package.mk
 define Package/bitcoind
 	SECTION:=utils
 	CATEGORY:=Utilities
-	TITLE:=bitcoind
+	TITLE:=Bitcoin full node
 	URL:=https://github.com/bitcoin/bitcoin
-ifeq ($(CONFIG_TARGET_brcm2708_RaspberryPi),)
-	DEPENDS:=+libcurl +libpthread +jansson +udev
-else
-	DEPENDS:=+libcurl +libpthread +jansson +udev +libncurses +libssp +boost-chrono +boost-filesystem +boost-program +boost-test 
-endif
+	DEPENDS:=+libcurl +libpthread +jansson +udev +libncurses +SSP_SUPPORT:libssp +boost-chrono +boost-filesystem +boost-program_options +boost-thread +boost-test 
 endef
 
 define Package/bitcoind/description
@@ -57,7 +53,7 @@ endef
 TARGET_LDFLAGS += -Wl,-rpath-link=$(STAGING_DIR)/usr/lib
 
 ifeq ($(CONFIG_BITCOIND),y)
-	CONFIGURE_ARGS += --without-miniupnpc --disable-wallet 
+	CONFIGURE_ARGS += --without-miniupnpc --disable-wallet --disable-tests
 	CONFIGURE_ARGS += --with-boost-libdir=$(STAGING_DIR)/usr/lib
 endif
 
