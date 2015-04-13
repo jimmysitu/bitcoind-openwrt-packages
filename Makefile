@@ -31,19 +31,21 @@ PKG_FIXUP:=autoreconf
 
 include $(INCLUDE_DIR)/package.mk
 
-define Package/bitcoind
+define Package/$(PKG_NAME)
 	SECTION:=utils
 	CATEGORY:=Utilities
 	TITLE:=Bitcoin full node
 	URL:=https://github.com/bitcoin/bitcoin
-	DEPENDS:=+libcurl +libpthread +jansson +udev +libncurses +SSP_SUPPORT:libssp +boost-chrono +boost-filesystem +boost-program_options +boost-thread +boost-test 
+	DEPENDS := +libcurl +libpthread +jansson +udev +libncurses 
+	DEPENDS += +SSP_SUPPORT:libssp +boost-chrono +boost-filesystem +boost-program_options +boost-thread +boost-test
+	DEPENDS += +libopenssl +libssp +libstdcpp
 endef
 
-define Package/bitcoind/description
+define Package/$(PKG_NAME)/description
 Bitcoind is a bitcoin full node
 endef
 
-define Package/bitcoind/config
+define Package/$(PKG_NAME)/config
 	menu "Configuration"
 	depends on PACKAGE_bitcoind
 	source "$(SOURCE)/Config.in"
@@ -53,7 +55,8 @@ endef
 TARGET_LDFLAGS += -Wl,-rpath-link=$(STAGING_DIR)/usr/lib
 
 ifeq ($(CONFIG_BITCOIND),y)
-	CONFIGURE_ARGS += --without-miniupnpc --disable-wallet --disable-tests
+	CONFIGURE_ARGS += --without-miniupnpc
+	CONFIGURE_ARGS += --disable-wallet --disable-tests 
 	CONFIGURE_ARGS += --with-boost-libdir=$(STAGING_DIR)/usr/lib
 endif
 
@@ -61,7 +64,7 @@ define Build/Compile
 	$(call Build/Compile/Default)
 endef
 
-define Package/bitcoind/install
+define Package/$(PKG_NAME)/install
 	$(INSTALL_DIR) $(1)/usr/bin
 	$(INSTALL_DIR) $(1)/etc/init.d
 	$(INSTALL_DIR) $(1)/etc/config
@@ -76,4 +79,4 @@ endif
 
 endef
 
-$(eval $(call BuildPackage,bitcoind))
+$(eval $(call BuildPackage,$(PKG_NAME)))
