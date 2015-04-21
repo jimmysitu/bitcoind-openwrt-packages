@@ -37,7 +37,7 @@ define Package/$(PKG_NAME)
 	TITLE:=Bitcoin full node
 	URL:=https://github.com/bitcoin/bitcoin
 	DEPENDS := +libcurl +libpthread +jansson +udev +libncurses 
-	DEPENDS += +SSP_SUPPORT:libssp +boost-chrono +boost-filesystem +boost-program_options +boost-thread +boost-test
+	DEPENDS += +boost-chrono +boost-filesystem +boost-program_options +boost-thread +boost-test
 	DEPENDS += +libopenssl +libssp +libstdcpp
 endef
 
