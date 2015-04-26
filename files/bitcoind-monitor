@@ -1,38 +1,8 @@
 #!/bin/sh
-# This file is for cron job
 
 # Make sure there is only one bitcoind running
-C=`pidof bitcoind | wc -w`
-if [ "$C" != "1" ]; then
-    killall -s 9 bitcoind
-    sleep 1
-    /etc/init.d/bitcoind restart
-    exit 0;
-fi
-
-# Make sure the devices staill active
-B=`bitcoind-api devs | grep "^   \[Last Valid Work\]"`
-if [ "$?" != "0" ]; then
-    killall -s 9 bitcoind
-    sleep 1
-    /etc/init.d/bitcoind restart
-    exit 0;
-fi
-
-A=`cat /tmp/cm.log`
-echo -n "$B" > /tmp/cm.log
-if [ "$A" == "$B" ]; then
-    killall -s 9 bitcoind
-    sleep 1
-    /etc/init.d/bitcoind restart
-    exit 0;
-fi
-
-# If there new device added, restart bitcoind
-B=`find /dev/ -name "ttyUSB*" | wc -l`
-A=`cat /tmp/usbnr.log`
-echo -n "$B" > /tmp/usbnr.log
-if [ "$A" != "$B" ]; then
+A=`pidof bitcoind | wc -w`
+if [ "$A" != "1" ]; then
     killall -s 9 bitcoind
     sleep 1
     /etc/init.d/bitcoind restart

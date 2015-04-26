@@ -56,7 +56,7 @@ TARGET_LDFLAGS += -Wl,-rpath-link=$(STAGING_DIR)/usr/lib
 
 ifeq ($(CONFIG_BITCOIND),y)
 	CONFIGURE_ARGS += --without-miniupnpc
-	CONFIGURE_ARGS += --disable-wallet --disable-tests 
+	CONFIGURE_ARGS += --disable-wallet
 	CONFIGURE_ARGS += --with-boost-libdir=$(STAGING_DIR)/usr/lib
 endif
 
@@ -69,7 +69,8 @@ define Package/$(PKG_NAME)/install
 	$(INSTALL_DIR) $(1)/etc/init.d
 	$(INSTALL_DIR) $(1)/etc/config
 
-	$(INSTALL_BIN) $(PKG_INSTALL_DIR)/usr/bin/bitcoind  $(1)/usr/bin
+	$(INSTALL_BIN) $(PKG_INSTALL_DIR)/usr/bin/bitcoind  	$(1)/usr/bin
+	$(INSTALL_BIN) $(PKG_INSTALL_DIR)/usr/bin/bitcoind-cli  $(1)/usr/bin
 
 ifeq ($(CONFIG_BITCOIND),y)
 	$(INSTALL_BIN) $(FILES_DIR)/bitcoind-monitor        $(1)/usr/bin/bitcoind-monitor
