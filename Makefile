@@ -71,6 +71,7 @@ define Package/$(PKG_NAME)/install
 
 	$(INSTALL_BIN) $(PKG_INSTALL_DIR)/usr/bin/bitcoind  	$(1)/usr/bin
 	$(INSTALL_BIN) $(PKG_INSTALL_DIR)/usr/bin/bitcoin-cli   $(1)/usr/bin
+	$(INSTALL_BIN) $(PKG_INSTALL_DIR)/usr/bin/test_bitcoin  $(1)/usr/bin
 
 ifeq ($(CONFIG_BITCOIND),y)
 	$(INSTALL_BIN) $(FILES_DIR)/bitcoind-monitor        $(1)/usr/bin/bitcoind-monitor
