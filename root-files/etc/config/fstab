@@ -13,3 +13,7 @@ config mount
 	option fstype 'ext4'
 	option target '/mnt/SDCard'
 
+config swap
+	option device '/dev/mmcblk0p2'
+	option enabled '1'
+

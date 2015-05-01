@@ -77,6 +77,10 @@ ifeq ($(CONFIG_BITCOIND),y)
 	$(INSTALL_BIN) $(FILES_DIR)/bitcoind-monitor        $(1)/usr/bin/bitcoind-monitor
 	$(INSTALL_BIN) $(FILES_DIR)/bitcoind.init           $(1)/etc/init.d/bitcoind
 	$(CP)          $(FILES_DIR)/bitcoind.config         $(1)/etc/config/bitcoind
+	$(INSTALL_DIR) $(1)/etc/uci-defaults
+	$(CP)          $(FILES_DIR)/bitcoind.uci-defaults   $(1)/etc/uci-defaults/01-bitcoind
+	$(INSTALL_DIR) $(1)/root/.bitcoin
+	$(CP)          $(FILES_DIR)/bitcoin.conf            $(1)/root/.bitcoin/bitcoin.conf
 endif
 
 endef

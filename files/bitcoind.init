@@ -32,14 +32,14 @@ start() {
     config_get _maxconnections default maxconnections
     config_get _outboundconnections default outboundconnections
 
-    RPC=" --rpcuser=$_rpcuser --rpcpassword=$_rpcpassword --rpcthreads=$_rpcthreads --rpcallowip=$_rpcallowip"
-    APPOPTIONS
-    PARAMS=" $AOPTIONS"
+    OPT="-datadir=$_datadir -txindex=$_txindex"
+    CNNT="-limitdownloadblocks=$_limitdownloadblocks -maxconnections=$_maxconnections -outboundconnections=$_outboundconnections"
+    RPC="-rpcuser=$_rpcuser -rpcpassword=$_rpcpassword -rpcthreads=$_rpcthreads -rpcallowip=$_rpcallowip"
+    PARAMS="$OPT $CNNT $RPC"
 
-    $APP $APPOPTIONS -q >/dev/null 2>&1
-    sleep 1
-
-    start-stop-daemon -S -x $APP -p $PID_FILE -m -b -- $PARAMS
+    #start-stop-daemon -S -x $APP -p $PID_FILE -m -b -- $PARAMS
+    # Use default configure file to start up
+    start-stop-daemon -S -x $APP -p $PID_FILE -m -b 
 }
 
 stop() {
