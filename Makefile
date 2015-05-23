@@ -52,6 +52,7 @@ define Package/$(PKG_NAME)/config
 	endmenu
 endef
 
+TARGET_CFLAGS  += -std=c99
 TARGET_LDFLAGS += -Wl,-rpath-link=$(STAGING_DIR)/usr/lib
 
 ifeq ($(CONFIG_BITCOIND),y)
